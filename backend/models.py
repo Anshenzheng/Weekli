@@ -20,7 +20,8 @@ class User(db.Model):
     team_id = db.Column(db.Integer, db.ForeignKey('team.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     reports = db.relationship('WeeklyReport', backref='author', lazy='dynamic')
-    reminders = db.relationship('Reminder', backref='user', lazy='dynamic')
+    received_reminders = db.relationship('Reminder', foreign_keys='Reminder.user_id', backref='recipient', lazy='dynamic')
+    sent_reminders = db.relationship('Reminder', foreign_keys='Reminder.sent_by_id', backref='sender', lazy='dynamic')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
