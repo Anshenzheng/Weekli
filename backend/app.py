@@ -18,12 +18,15 @@ CORS(app)
 jwt = JWTManager(app)
 db.init_app(app)
 
+def get_current_user():
+    user_id = int(get_jwt_identity())
+    return User.query.get(user_id)
+
 def admin_required(f):
     @wraps(f)
     @jwt_required()
     def decorated(*args, **kwargs):
-        user_id = get_jwt_identity()
-        user = User.query.get(user_id)
+        user = get_current_user()
         if user.role != 'admin':
             return jsonify({"msg": "权限不足"}), 403
         return f(*args, **kwargs)
@@ -33,8 +36,7 @@ def manager_required(f):
     @wraps(f)
     @jwt_required()
     def decorated(*args, **kwargs):
-        user_id = get_jwt_identity()
-        user = User.query.get(user_id)
+        user = get_current_user()
         if user.role not in ['admin', 'manager']:
             return jsonify({"msg": "权限不足"}), 403
         return f(*args, **kwargs)
@@ -109,7 +111,7 @@ def login():
     if not user or not user.check_password(password):
         return jsonify({"msg": "用户名或密码错误"}), 401
 
-    access_token = create_access_token(identity=user.id)
+    access_token = create_access_token(identity=str(user.id))
     return jsonify({
         "access_token": access_token,
         "user": {
@@ -125,8 +127,7 @@ def login():
 @app.route('/api/profile', methods=['GET'])
 @jwt_required()
 def get_profile():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+    user = get_current_user()
     
     return jsonify({
         "id": user.id,
@@ -285,10 +286,10 @@ def delete_user(user_id):
 @app.route('/api/reports/my', methods=['GET'])
 @jwt_required()
 def get_my_reports():
-    user_id = get_jwt_identity()
+    user = get_current_user()
     week = request.args.get('week')
     
-    query = WeeklyReport.query.filter_by(user_id=user_id)
+    query = WeeklyReport.query.filter_by(user_id=user.id)
     
     if week:
         query = query.filter_by(week=week)
@@ -309,8 +310,8 @@ def get_my_reports():
 @app.route('/api/reports/my/<week>', methods=['GET'])
 @jwt_required()
 def get_my_week_report(week):
-    user_id = get_jwt_identity()
-    report = WeeklyReport.query.filter_by(user_id=user_id, week=week).first()
+    user = get_current_user()
+    report = WeeklyReport.query.filter_by(user_id=user.id, week=week).first()
     
     if report:
         return jsonify({
@@ -334,7 +335,7 @@ def get_my_week_report(week):
 @app.route('/api/reports', methods=['POST'])
 @jwt_required()
 def create_report():
-    user_id = get_jwt_identity()
+    user = get_current_user()
     data = request.get_json()
     week = data.get('week')
     content = data.get('content', '')
@@ -343,7 +344,7 @@ def create_report():
     if not week:
         week = get_current_week()
 
-    existing = WeeklyReport.query.filter_by(user_id=user_id, week=week).first()
+    existing = WeeklyReport.query.filter_by(user_id=user.id, week=week).first()
     
     if existing:
         if existing.status == 'submitted':
@@ -357,7 +358,7 @@ def create_report():
         report = existing
     else:
         report = WeeklyReport(
-            user_id=user_id,
+            user_id=user.id,
             week=week,
             content=content,
             status='submitted' if submit else 'draft'
@@ -415,14 +416,13 @@ def get_all_reports():
 @app.route('/api/reports/<int:report_id>', methods=['GET'])
 @jwt_required()
 def get_report(report_id):
-    user_id = get_jwt_identity()
-    current_user = User.query.get(user_id)
+    current_user = get_current_user()
     report = WeeklyReport.query.get(report_id)
     
     if not report:
         return jsonify({"msg": "周报不存在"}), 404
     
-    if current_user.role == 'member' and report.user_id != user_id:
+    if current_user.role == 'member' and report.user_id != current_user.id:
         return jsonify({"msg": "权限不足"}), 403
     
     return jsonify({
@@ -497,7 +497,7 @@ def get_unsubmitted():
 @app.route('/api/reminders/send', methods=['POST'])
 @manager_required
 def send_reminders():
-    current_user_id = get_jwt_identity()
+    current_user = get_current_user()
     data = request.get_json()
     user_ids = data.get('user_ids', [])
     week = data.get('week', get_current_week())
@@ -513,7 +513,7 @@ def send_reminders():
             reminder = Reminder(
                 user_id=user_id,
                 week=week,
-                sent_by_id=current_user_id,
+                sent_by_id=current_user.id,
                 message=message
             )
             reminders.append(reminder)
