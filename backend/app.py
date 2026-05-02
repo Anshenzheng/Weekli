@@ -591,14 +591,13 @@ def get_submission_stats():
         } for stat in user_stats]
     })
 
-@app.route('/api/init', methods=['GET'])
-def init_data():
+def init_default_data():
     if Team.query.count() > 0:
-        return jsonify({"msg": "数据已初始化"}), 200
+        return False, "数据已初始化"
     
     team = Team(name='默认团队', description='系统默认创建的团队')
     db.session.add(team)
-    db.session.commit()
+    db.session.flush()
     
     admin = User(
         username='admin',
@@ -636,18 +635,36 @@ def init_data():
     db.session.add(member2)
     
     db.session.commit()
-    
-    return jsonify({
-        "msg": "数据初始化完成",
-        "default_users": [
-            {"username": "admin", "password": "admin123", "role": "管理员"},
-            {"username": "manager", "password": "manager123", "role": "经理"},
-            {"username": "member1", "password": "member123", "role": "成员"},
-            {"username": "member2", "password": "member123", "role": "成员"}
-        ]
-    }), 201
+    return True, "数据初始化完成"
+
+@app.route('/api/init', methods=['GET'])
+def init_data():
+    success, msg = init_default_data()
+    if success:
+        return jsonify({
+            "msg": msg,
+            "default_users": [
+                {"username": "admin", "password": "admin123", "role": "管理员"},
+                {"username": "manager", "password": "manager123", "role": "经理"},
+                {"username": "member1", "password": "member123", "role": "成员"},
+                {"username": "member2", "password": "member123", "role": "成员"}
+            ]
+        }), 201
+    else:
+        return jsonify({"msg": msg}), 200
 
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
+        success, msg = init_default_data()
+        if success:
+            print("=" * 50)
+            print("默认数据已初始化：")
+            print("  管理员: admin / admin123")
+            print("  经理: manager / manager123")
+            print("  成员: member1 / member123")
+            print("  成员: member2 / member123")
+            print("=" * 50)
+        else:
+            print("数据库已存在，跳过默认数据初始化")
     app.run(debug=True, host='0.0.0.0', port=5000)
